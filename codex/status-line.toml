@@ -8,10 +8,12 @@ status_line = [
   "model-with-reasoning",
   "project-name",
   "git-branch",
+  "branch-changes",
+  "pull-request-number",
   "context-used",
   "five-hour-limit",
   "weekly-limit",
-  "estimated-thread-cost",
+  "task-progress",
   "used-tokens",
 ]
 status_line_use_colors = true
