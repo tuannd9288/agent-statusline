@@ -56,36 +56,87 @@ cache ● 1h ██░░░░░░░░ 9m left · hit 87% · misses 1      
 cache ○ cold · next message re-caches 82k tokens          ← red: expired
 ```
 
-**Why this matters.** Every time you send a message, Claude Code sends the
-*whole* conversation again, because the model does not remember anything between
-messages. The **prompt cache** lets it skip re-reading the part it has already
-seen. While the cache is *warm*, replies start faster and use much less of your
-usage limit. Once it *expires*, the next message has to process everything from
-scratch, which is slower and more expensive. The countdown shows how much time is
-left, so you know whether to send that follow-up now or accept the slower turn.
-
-How long the cache lasts:
-
-- On a **Claude subscription** (Pro, Max, ...), the main conversation's cache
-  lasts **1 hour** after your last message.
-- **Subagents** (helpers Claude starts in the background) get **5 minutes**.
-- With an **API key**, or once you are using **extra usage credits** on a
-  subscription, it is **5 minutes**.
-
-A few things worth knowing:
-
-- **Switching models** in the middle of a conversation (`/model`) starts the
-  cache over: the next message re-reads everything.
-- **Editing CLAUDE.md** in the middle of a session does *not* break the cache,
-  but the change also does not take effect until `/clear`, `/compact` or a restart.
-- **`/rewind`** goes back to an earlier point and can reuse the cache from that
-  point. **`/compact`** replaces the conversation with a summary and builds a
-  new cache.
-
-Source: [How Claude Code uses prompt caching](https://code.claude.com/docs/en/prompt-caching).
-
 The countdown needs Claude Code **2.1.251 or newer** and appears after Claude's
 first reply. On older versions you simply get line 1.
+
+Line 2 is explained in detail in the next section.
+
+## How to read it and what to do
+
+You do not need to watch the status line. A glance now and then is enough. Here
+is what each part tells you, and what (if anything) to do about it.
+
+| You see | What it means | What to do |
+| --- | --- | --- |
+| `◆ Opus 5.5 · high` | The model and how hard it thinks | Pick the model at the start of a conversation and keep it. Switching models halfway (`/model`) makes the next message re-read the whole conversation, which is slower and uses more of your limit. |
+| `👤 alex` | The account being used | If you have more than one account (work and personal, say), check this before you start. |
+| `▣ my-app · ⎇ main*` | The project and the branch. `*` means changes that are not committed (saved in git) yet | Make sure it is the project you meant. A `*` is normal while you work; it is a reminder that the changes are not committed yet. |
+| `ctx 42% used` | How full the conversation's memory is | Under about 50 %: fine. From about 70 %, answers tend to get worse because there is a lot to keep track of. When a task is **done**, type `/clear` to start fresh. If you are **in the middle** of a task, type `/compact` to shrink the conversation into a summary and keep going. |
+| `◷ 5h 77% left` / `◷ 7d 59% left` | Usage left in the 5-hour window and in the week | Under about 20 %: save what is left for important work. If the 7-day number drops faster than the days go by (for example half of it gone two days after it last reset), slow down, or start simple tasks in a new conversation with a lighter model. |
+| `$1.23` | Estimated cost of this conversation at list price | On a subscription you are **not** billed this amount. It is a measure of how heavy the conversation is. On an API key it is roughly what you pay. |
+
+### The cache line, in plain words
+
+Every time you send a message, Claude Code sends the **whole conversation**
+again: the model does not remember anything between messages. The **prompt
+cache** lets the model skip the part it has already read. That makes replies
+start faster and use much less of your usage limit.
+
+The cache does not last forever. Every message you send resets its timer.
+If you send nothing for a while, it expires:
+
+- **Claude subscription** (Pro, Max, ...), within your plan's usage: the main
+  conversation's cache lasts about **1 hour**.
+- **Subagents** (helpers Claude starts in the background): **5 minutes**.
+- **API key**, or a subscription that has moved on to **extra usage credits**:
+  **5 minutes**.
+
+After it expires, the next message has to process the whole conversation again
+from scratch.
+
+| You see | What it means | What to do |
+| --- | --- | --- |
+| green `cache ● 1h ███████░░░ 38m left · hit 91%` | The cache is warm. `hit 91%` means 91 % of everything sent this session was reused from cache | Nothing. Keep working; every message refreshes the timer. |
+| yellow `cache ● 1h ██░░░░░░░░ 7m left` | Less than a fifth of the time is left | If you still have a question for this conversation, ask it now. If you are about to take a long break, nothing to do. |
+| red `cache ○ cold · next message re-caches 82k tokens` | The cache has expired. Your next message will re-read about 82,000 tokens (roughly 60,000 words) | If the old task is **done**, type `/clear` and start fresh; then the old conversation does not need re-reading. If you still **need** the conversation, just continue; the first reply will be slower. The bigger the number, the stronger the case for `/clear`. |
+| `misses 2` / `last miss: tools changed` | How many times this session the cache was not used when it could have been, and the likely reason for the last one | See below. |
+
+**What about `/compact` when the cache is cold?** It does not avoid the cost:
+to write the summary, Claude has to read the whole conversation once, without
+the cache. What it does is make every *later* message much smaller. So compact
+when you plan to keep going for a while, and prefer to do it while the cache is
+still warm, when it is much cheaper.
+
+**Common reasons the cache starts over, and which ones are yours:**
+
+- **Switching model** (`/model`) mid-conversation: each model has its own cache,
+  so the next message re-reads everything. Pick the model at the start.
+- **Changing tools mid-session** (`tools changed`): for example connecting or
+  removing an MCP server, or blocking a whole tool in your permissions. On
+  recent models Claude Code usually avoids this, but not always.
+- **Changing effort level or turning fast mode on or off** can also start the
+  cache over, depending on the model.
+- **Cache expired** (`ttl expired 5m`): you were away longer than the cache lasts.
+- **`likely server side`**: the likely cause is on the server, not something you
+  changed. Nothing to do.
+
+Things that do **not** break the cache:
+
+- **Editing CLAUDE.md** during a conversation. The change also does not take
+  effect until `/clear`, `/compact` or a restart.
+- **`/rewind`** to an earlier point: it can reuse the cache from that point.
+  (`/compact`, in contrast, builds a new cache for the summary; that is expected
+  and is not counted as a miss.)
+
+### Three habits
+
+1. Glance at **ctx**: `/clear` when a task is done, `/compact` mid-task once it gets high.
+2. Glance at the **cache colour**: yellow means "ask now if you still need this
+   conversation"; red with a big number means "consider `/clear`".
+3. Glance at **5h / 7d**: under 20 %, save it for the work that matters.
+
+Sources: [How Claude Code uses prompt caching](https://code.claude.com/docs/en/prompt-caching)
+and the [status line reference](https://code.claude.com/docs/en/statusline#prompt-cache-fields).
 
 ---
 
