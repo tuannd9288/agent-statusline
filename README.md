@@ -15,6 +15,89 @@ You do not need to be a developer to use this.
 
 ---
 
+## Quick install (copy and paste)
+
+Pick the agent you use and copy one block. Each one is safe to run again, and
+each has an undo further down.
+
+### Claude Code
+
+**Easiest — no terminal.** Open Claude Code and paste:
+
+```text
+Install the status line from github.com/tuannd9288/agent-statusline for me
+```
+
+**Or in a terminal** (Mac: press `Cmd + Space`, type *Terminal*, press Enter):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tuannd9288/agent-statusline/main/claude/install.sh | bash
+```
+
+Then restart Claude Code or send a message. The cache line appears after
+Claude's first reply. If the installer says `jq` is missing, it prints the
+command to install it (on a Mac: `brew install jq`); run that, then run the
+line above again.
+
+Undo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tuannd9288/agent-statusline/main/claude/install.sh | bash -s -- --uninstall
+```
+
+### Codex
+
+**Easiest.** Open Codex and paste:
+
+```text
+Add the status line from github.com/tuannd9288/agent-statusline/blob/main/codex/status-line.toml to my ~/.codex/config.toml. If a [tui] section already exists, put the settings under it instead of adding a second one. Then tell me to restart Codex.
+```
+
+**Or by hand:** add these lines to the end of `~/.codex/config.toml` (create the
+file if it does not exist; if it already has a `[tui]` line, put the two
+settings under that line instead), then restart Codex:
+
+```toml
+[tui]
+status_line = [
+  "run-state",
+  "model-with-reasoning",
+  "project-name",
+  "git-branch",
+  "context-used",
+  "five-hour-limit",
+  "weekly-limit",
+  "estimated-thread-cost",
+  "used-tokens",
+]
+status_line_use_colors = true
+```
+
+Undo: delete those lines and restart Codex.
+
+### Pi
+
+In a terminal (keeps a copy of any status bar layout you already have):
+
+```bash
+pi install npm:@kreeger/pi-statusbar@0.2.0
+mkdir -p ~/.pi/agent
+[ -f ~/.pi/agent/statusbar.json ] && cp ~/.pi/agent/statusbar.json ~/.pi/agent/statusbar.json.bak
+curl -fsSL https://raw.githubusercontent.com/tuannd9288/agent-statusline/main/pi/statusbar.json -o ~/.pi/agent/statusbar.json
+```
+
+Restart Pi. Undo: `rm ~/.pi/agent/statusbar.json` (or move the `.bak` copy back).
+
+### Antigravity CLI
+
+No copy-paste setup here: Google's example has no license, so it cannot be
+shared. See [`antigravity/`](antigravity/) for the link and three suggested tweaks.
+
+Want to know what you are installing first? Read on: the next sections explain
+every part, and [Install (Claude Code)](#install-claude-code) has the details.
+
+---
+
 ## What is a status line?
 
 When you chat with Claude Code, there is a strip of text at the bottom of the
