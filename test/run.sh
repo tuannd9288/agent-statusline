@@ -54,9 +54,14 @@ for shell_bin in $shells; do
   for ex in $examples; do
     json="$root/examples/$ex.json"
     [ -f "$json" ] || { fail "missing example $ex"; continue; }
-    input=$(jq --arg d "$work/projects/my-app" \
-      '.cwd = $d | .workspace.current_dir = $d | .workspace.project_dir = $d' "$json")
-    has_cache=$(jq -r 'if .prompt_cache then 1 else 0 end' "$json")
+    # Point the example at the temp git repo. Invalid JSON is passed as is.
+    if input=$(jq --arg d "$work/projects/my-app" \
+      '.cwd = $d | .workspace.current_dir = $d | .workspace.project_dir = $d' "$json" 2>/dev/null); then
+      has_cache=$(jq -r 'if (.prompt_cache | type) == "object" then 1 else 0 end' "$json")
+    else
+      input=$(cat "$json")
+      has_cache=0
+    fi
     for w in $widths; do
       out=$(printf '%s' "$input" | COLUMNS=$w "$shell_bin" "$root/claude/statusline.sh" 2>"$work/err")
       status=$?
@@ -77,7 +82,8 @@ done
 
 # Content checks on the cache line (plain text, colors stripped).
 plain() {
-  jq --arg d "$work/projects/my-app" '.cwd = $d | .workspace.current_dir = $d' "$root/examples/$1.json" \
+  { jq --arg d "$work/projects/my-app" '.cwd = $d | .workspace.current_dir = $d' "$root/examples/$1.json" 2>/dev/null \
+      || cat "$root/examples/$1.json"; } \
     | COLUMNS=$2 bash "$root/claude/statusline.sh" | sed $'s/\033\\[[0-9;]*m//g'
 }
 expect() {
@@ -102,6 +108,40 @@ expect api-key-5m 120 "cache ● 5m"
 expect_not full 200 "re-cache"
 expect full 200 "⑂ #42"
 expect full 200 "◇ fix login bug"
+# Malformed fields: only the bad value (or the cache line) goes; line 1 stays whole.
+full_line="◆ Opus 5.5 · high │ 👤 alex │ ▣ my-app · ⎇ main* │ ctx 42% used │ ◷ 5h 77% left │ ◷ 7d 59% left"
+for ex in malformed-last-miss-cause malformed-ttl malformed-expires-at malformed-hit-ratio malformed-model; do
+  expect "$ex" 120 "$full_line"
+done
+expect     malformed-last-miss-cause 120 "cache ○ cold · next message re-caches 82k tokens"
+expect_not malformed-last-miss-cause 120 "last miss"
+expect     malformed-ttl 120 "cache ● 38m left · hit 91% · misses 0"
+expect     malformed-expires-at 120 "cache ● 1h · hit 91% · misses 0"
+expect     malformed-hit-ratio 120 "cache ● 1h ███████░░░ 38m left · misses 0"
+expect_not malformed-hit-ratio 120 "hit"
+expect     malformed-rate-limits 120 "◆ Opus 5.5 · high │ 👤 alex │ ▣ my-app · ⎇ main* │ ctx 42% used │ ◷ 7d 59% left"
+expect_not malformed-rate-limits 120 "5h"
+expect     malformed-rate-limits 120 "cache ● 1h ███████░░░ 38m left"
+expect     invalid 120 "◆ Claude │ 👤 alex"
+# The exact case from the bug report.
+if printf '%s' '{"model":{"display_name":"Opus 5.5"},"prompt_cache":{"warm":false,"last_miss_cause":"weird"}}' \
+  | COLUMNS=150 bash "$root/claude/statusline.sh" 2>"$work/err" | head -1 | grep -qF "Opus 5.5" && [ ! -s "$work/err" ]; then
+  pass=$((pass + 1)); else fail "bug repro: model name lost"; fi
+# Any JSON type in any position: never an error, always a first line.
+for bad in '"just a string"' '42' 'null' '[1,2,3]' '{"model":null}' '{"model":7,"effort":[],"workspace":"x","cwd":{}}' \
+  '{"context_window":"full","rate_limits":[],"cost":{"total_cost_usd":"1"},"pr":{"number":"7"}}' \
+  '{"context_window":{"used_percentage":1e40,"total_input_tokens":-5,"current_usage":{"cache_read_input_tokens":1e300}}}' \
+  '{"prompt_cache":"warm"}' '{"prompt_cache":{"warm":"yes","ttl":true,"expires_at":-1,"misses":{},"recache_tokens_if_cold":"82k"}}' \
+  '{"prompt_cache":{"warm":true,"ttl":"0m","expires_at":1767000100}}' '{"agent":{"name":["x"]},"session_name":{"a":1}}' ''; do
+  for w in 30 80 200; do
+    out=$(printf '%s' "$bad" | COLUMNS=$w bash "$root/claude/statusline.sh" 2>"$work/err"); status=$?
+    if [ "$status" -eq 0 ] && [ ! -s "$work/err" ] && [ -n "$(printf '%s' "$out" | head -1)" ]; then
+      pass=$((pass + 1))
+    else
+      fail "input $bad @ $w: exit $status, stderr: $(cat "$work/err"), out: $out"
+    fi
+  done
+done
 # Yellow (33m) when under 20% of the TTL is left, green (32m) otherwise.
 if jq '.' "$root/examples/about-to-expire.json" | COLUMNS=120 bash "$root/claude/statusline.sh" | tail -1 | grep -q $'\033\\[33m'; then
   pass=$((pass + 1)); else fail "about-to-expire: cache line not yellow"; fi

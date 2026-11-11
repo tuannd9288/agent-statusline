@@ -1,0 +1,55 @@
+{
+  "model": "Opus 5.5",
+  "effort": {
+    "level": "high"
+  },
+  "cwd": "/home/alex/projects/my-app",
+  "workspace": {
+    "current_dir": "/home/alex/projects/my-app",
+    "project_dir": "/home/alex/projects/my-app",
+    "repo": {
+      "host": "github.com",
+      "owner": "alex",
+      "name": "my-app"
+    }
+  },
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "cost": {
+    "total_cost_usd": 1.2345,
+    "total_duration_ms": 1800000
+  },
+  "context_window": {
+    "total_input_tokens": 84200,
+    "total_output_tokens": 6100,
+    "context_window_size": 200000,
+    "used_percentage": 42,
+    "remaining_percentage": 58,
+    "current_usage": {
+      "input_tokens": 1200,
+      "output_tokens": 900,
+      "cache_creation_input_tokens": 2400,
+      "cache_read_input_tokens": 80600
+    }
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 23.5,
+      "resets_at": 1767010000
+    },
+    "seven_day": {
+      "used_percentage": 41,
+      "resets_at": 1767400000
+    }
+  },
+  "prompt_cache": {
+    "warm": true,
+    "caching_observed": true,
+    "ttl": "1h",
+    "expires_at": 1767002280,
+    "requests": 14,
+    "misses": 0,
+    "hit_ratio": 0.91,
+    "recache_tokens_if_cold": 82400,
+    "last_miss_cause": null
+  }
+}
