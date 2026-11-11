@@ -19,69 +19,86 @@ fields=()
 while IFS= read -r line; do
   fields+=("$line")
 done < <(
+  # Every field is read on its own inside `try`, and every value is
+  # type-checked. A field of an unexpected type (a string where an object is
+  # expected, a number where a string is expected, ...) only blanks that one
+  # value; it never takes the rest of the line down with it.
   printf '%s' "$input" | jq -r '
+    def safe(f): try f catch null;
     def clean:
-      if . == null then ""
-      else tostring | gsub("[[:cntrl:]]"; " ")
-      end;
-    def pct:
-      if type == "number" then
-        (if . < 0 then 0 elif . > 100 then 100 else . end)
-        | round
-        | tostring
+      if type == "string" then gsub("[[:cntrl:]]"; " ")
+      elif type == "number" then tostring
       else ""
       end;
-    def left:
+    # Whole numbers bash can do arithmetic on: 0 <= n < 10^15, else blank.
+    def int:
+      if type == "number" and . >= 0 and . < 1e15 then (round | tostring) else "" end;
+    def int0: int | if . == "" then "0" else . end;
+    def clamp_pct:
       if type == "number" then
-        (100 - .)
-        | if . < 0 then 0 elif . > 100 then 100 else . end
-        | round
-        | tostring
+        (if . < 0 then 0 elif . > 100 then 100 else . end) | round | tostring
       else ""
       end;
-    def num:
-      if type == "number" then (. | round | tostring) else "0" end;
-    def opt_num:
-      if type == "number" then (. | round | tostring) else "" end;
+    def left: if type == "number" then (100 - .) | clamp_pct else "" end;
     def usd:
-      if type == "number" then ((. * 100 | round) / 100 | tostring) else "" end;
-    def bool:
-      if type == "boolean" then tostring else "" end;
+      if type == "number" and . >= 0 and . < 1e9
+      then ((. * 100 | round) / 100 | tostring) else "" end;
+    def bool: if type == "boolean" then tostring else "" end;
+    def ttl:
+      if type == "string" and test("^[0-9]{1,6}[mh]$") then . else "" end;
+    def model_name:
+      if type == "string" then .
+      elif type == "object" then
+        ([.display_name, .id] | map(select(type == "string" and length > 0)) | first)
+      else null
+      end;
+    def causes:
+      if type == "object" and (.causes | type) == "array" and (.causes | length) > 0
+      then .causes | map(clean | gsub("_"; " ")) | map(select(length > 0)) | join(", ")
+      else ""
+      end;
+    def first_str(a; b):
+      [a, b] | map(select(type == "string" and length > 0)) | first // "";
+
     [
-      (.model.display_name // .model.id // "Claude" | clean),
-      (.effort.level | clean),
-      (.workspace.current_dir // .cwd // "" | clean),
-      (.workspace.repo.name // "" | clean),
-      (.workspace.project_dir // .workspace.current_dir // .cwd // "" | clean),
-      (.context_window.used_percentage | pct),
-      (.rate_limits.five_hour.used_percentage | left),
-      (.rate_limits.seven_day.used_percentage | left),
-      (.agent.name | clean),
-      (.session_name | clean),
-      (.pr.number | if type == "number" then tostring else "" end),
-      (.pr.review_state | clean),
-      (.cost.total_cost_usd | usd),
-      (.context_window.total_input_tokens | num),
-      (.context_window.total_output_tokens | num),
-      (.context_window.current_usage.cache_read_input_tokens | num),
-      (.context_window.current_usage.cache_creation_input_tokens | num),
-      (.context_window.current_usage.input_tokens | num),
-      (if (.prompt_cache | type) == "object" then "1" else "" end),
-      (.prompt_cache.warm | bool),
-      (.prompt_cache.ttl | clean),
-      (.prompt_cache.expires_at | opt_num),
-      (.prompt_cache.hit_ratio
-        | if type == "number" then (. * 100 | round | tostring) else "" end),
-      (.prompt_cache.misses | opt_num),
-      (.prompt_cache.recache_tokens_if_cold | opt_num),
-      (.prompt_cache.last_miss_cause.causes
-        | if type == "array" and length > 0
-          then map(tostring | gsub("_"; " ")) | join(", ") | clean
+      (safe(.model | model_name) // "Claude" | clean),
+      (safe(.effort.level) | clean),
+      (safe(first_str(.workspace.current_dir; .cwd)) | clean),
+      (safe(.workspace.repo.name) | clean),
+      (safe(first_str(.workspace.project_dir; first_str(.workspace.current_dir; .cwd))) | clean),
+      (safe(.context_window.used_percentage) | clamp_pct),
+      (safe(.rate_limits.five_hour.used_percentage) | left),
+      (safe(.rate_limits.seven_day.used_percentage) | left),
+      (safe(.agent.name) | clean),
+      (safe(.session_name) | clean),
+      (safe(.pr.number) | int),
+      (safe(.pr.review_state) | clean),
+      (safe(.cost.total_cost_usd) | usd),
+      (safe(.context_window.total_input_tokens) | int0),
+      (safe(.context_window.total_output_tokens) | int0),
+      (safe(.context_window.current_usage.cache_read_input_tokens) | int0),
+      (safe(.context_window.current_usage.cache_creation_input_tokens) | int0),
+      (safe(.context_window.current_usage.input_tokens) | int0),
+      (if safe(.prompt_cache | type) == "object" then "1" else "" end),
+      (safe(.prompt_cache.warm) | bool),
+      (safe(.prompt_cache.ttl) | ttl),
+      (safe(.prompt_cache.expires_at) | int),
+      (safe(.prompt_cache.hit_ratio)
+        | if type == "number" then
+            (if . < 0 then 0 elif . > 1 then 1 else . end) * 100 | round | tostring
           else "" end),
-      (.prompt_cache.caching_observed | bool)
+      (safe(.prompt_cache.misses) | int),
+      (safe(.prompt_cache.recache_tokens_if_cold) | int),
+      (safe(.prompt_cache.last_miss_cause) | causes),
+      (safe(.prompt_cache.caching_observed) | bool)
     ] | .[]
   ' 2>/dev/null
 )
+
+# Exactly 27 lines or nothing: anything else means the input was not usable.
+if [ "${#fields[@]}" -ne 27 ]; then
+  fields=()
+fi
 
 model=${fields[0]:-Claude}
 effort=${fields[1]:-}
@@ -427,6 +444,8 @@ if [ "$state" = "warm" ]; then
       head+=" ${bar}"
     fi
     head+=" $(format_left "$remaining") left"
+  elif [ -z "$pc_ttl" ]; then
+    head+=" warm"
   fi
   cache_parts+=("$head")
   if [ "$columns" -ge 60 ]; then
