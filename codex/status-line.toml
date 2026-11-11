@@ -1,0 +1,17 @@
+# Codex built-in status line.
+# Paste this into ~/.codex/config.toml. If that file already has a [tui]
+# section, add the two keys below to it instead of adding a second [tui].
+
+[tui]
+status_line = [
+  "run-state",
+  "model-with-reasoning",
+  "project-name",
+  "git-branch",
+  "context-used",
+  "five-hour-limit",
+  "weekly-limit",
+  "estimated-thread-cost",
+  "used-tokens",
+]
+status_line_use_colors = true

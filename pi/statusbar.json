@@ -1,0 +1,14 @@
+{
+  "divider": " │ ",
+  "sections": [
+    "model",
+    "thinking",
+    "directory",
+    "git",
+    "context",
+    "codex-quota",
+    "cache",
+    "cost",
+    "token-flow"
+  ]
+}
